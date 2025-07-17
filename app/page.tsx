@@ -6,239 +6,177 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Upload, X } from "lucide-react";
-import { useS3Upload } from "next-s3-upload";
+import { Textarea } from "@/components/ui/textarea";
+import { Upload, FileText, Copy, Check } from "lucide-react";
 import { useState } from "react";
 
-const languages = [
-  { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-  { code: "it", name: "Italian" },
-  { code: "ja", name: "Japanese" },
-  { code: "ko", name: "Korean" },
-  { code: "zh", name: "Chinese" },
-  { code: "pt", name: "Portuguese" },
-];
-
-const models = [
-  {
-    value: "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
-    label: "Llama 3.2 11B",
-  },
-  {
-    value: "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
-    label: "Llama 3.2 90B",
-  },
-];
-
-const lengths = [
-  { value: "short", label: "Short" },
-  { value: "medium", label: "Medium" },
-  { value: "long", label: "Long" },
-];
-
 export default function Page() {
-  const [image, setImage] = useState<string | null>(null);
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
-  const [descriptions, setDescriptions] = useState<
-    { language: string; description: string }[]
-  >([]);
+  const [projectDescription, setProjectDescription] = useState<string>("");
+  const [codebaseFiles, setCodebaseFiles] = useState<File[]>([]);
+  const [contextJson, setContextJson] = useState<any>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
-  const [model, setModel] = useState(models[0].value);
-  const [length, setLength] = useState(lengths[0].value);
+  const [copied, setCopied] = useState(false);
 
-  const { uploadToS3 } = useS3Upload();
-
-  const handleImageUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const { url } = await uploadToS3(file);
-    setImage(url);
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    setCodebaseFiles(files);
   };
+
   const handleSubmit = async () => {
-    if (!image || selectedLanguages.length === 0) return;
+    if (!projectDescription.trim() || codebaseFiles.length === 0) return;
 
     setStatus("loading");
 
-    const response = await fetch("/api/generateDescriptions", {
-      method: "POST",
-      body: JSON.stringify({
-        languages: selectedLanguages,
-        imageUrl: image,
-        model,
-        length,
-      }),
+    const formData = new FormData();
+    formData.append("projectDescription", projectDescription);
+    
+    codebaseFiles.forEach((file) => {
+      formData.append("files", file);
     });
 
-    const descriptions = await response.json();
-    console.log(descriptions);
+    try {
+      const response = await fetch("/api/generateContext", {
+        method: "POST",
+        body: formData,
+      });
 
-    setDescriptions(descriptions);
-    setStatus("success");
+      if (!response.ok) {
+        throw new Error("Failed to generate context");
+      }
+
+      const context = await response.json();
+      setContextJson(context);
+      setStatus("success");
+    } catch (error) {
+      console.error("Error generating context:", error);
+      setStatus("idle");
+    }
+  };
+
+  const copyToClipboard = async () => {
+    if (contextJson) {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(contextJson, null, 2));
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (error) {
+        console.error("Failed to copy to clipboard:", error);
+      }
+    }
+  };
+
+  const removeFile = (indexToRemove: number) => {
+    setCodebaseFiles(files => files.filter((_, index) => index !== indexToRemove));
   };
 
   return (
     <div className="mx-auto my-12 grid max-w-7xl grid-cols-1 gap-8 px-4 lg:grid-cols-2">
       <Card className="mx-auto w-full max-w-xl p-6">
         <h2 className="mb-1 text-center text-2xl font-bold">
-          Product Description Generator
+          Context Generator for Vibe Coders
         </h2>
         <p className="mb-6 text-balance text-center text-sm text-gray-500">
-          Upload an image of your product to generate descriptions in multiple
-          languages.
+          Upload your codebase and provide a project description to generate a comprehensive context file for AI understanding.
         </p>
-        <div>
-          <div
-            className={`${image ? "border-transparent" : "transition-colors hover:border-primary"} my-4 flex aspect-[3] flex-col items-center justify-center rounded-lg border-2 border-dashed`}
-          >
-            {image ? (
-              <div className="relative flex h-full max-h-full w-full items-center justify-center">
-                <img
-                  src={image}
-                  alt="Uploaded product"
-                  className="h-full rounded"
-                />
-                <Button
-                  variant="default"
-                  size="icon"
-                  className="absolute right-0 top-0"
-                  onClick={() => setImage(null)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
+        
+        <div className="space-y-6">
+          {/* Project Description Input */}
+          <div>
+            <Label htmlFor="project-description" className="text-sm font-medium">
+              Project Description
+            </Label>
+            <Textarea
+              id="project-description"
+              placeholder="Describe your project, its purpose, key features, and any important context..."
+              value={projectDescription}
+              onChange={(e) => setProjectDescription(e.target.value)}
+              className="mt-2 min-h-[120px] resize-none"
+            />
+          </div>
+
+          {/* Codebase Upload */}
+          <div>
+            <Label htmlFor="codebase-upload" className="text-sm font-medium">
+              Codebase Files
+            </Label>
+            <div className="mt-2">
               <Label
-                htmlFor="image-upload"
-                className="flex w-full grow cursor-pointer items-center justify-center"
+                htmlFor="codebase-upload"
+                className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-6 transition-colors hover:border-primary"
               >
                 <div className="flex flex-col items-center">
-                  <Upload className="mb-2 h-8 w-8" />
-                  <span>Upload product image</span>
+                  <Upload className="mb-2 h-8 w-8 text-gray-400" />
+                  <span className="text-sm text-gray-600">
+                    Upload codebase files
+                  </span>
+                  <span className="mt-1 text-xs text-gray-400">
+                    Select multiple files (JS, TS, JSON, etc.)
+                  </span>
                 </div>
                 <input
-                  id="image-upload"
+                  id="codebase-upload"
                   type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
+                  multiple
+                  accept=".js,.ts,.jsx,.tsx,.json,.md,.txt,.py,.java,.cpp,.c,.html,.css,.scss,.vue,.php,.rb,.go,.rs,.swift,.kt"
+                  onChange={handleFileUpload}
                   className="hidden"
                 />
               </Label>
+            </div>
+
+            {/* Display Selected Files */}
+            {codebaseFiles.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm font-medium text-gray-700">
+                  Selected Files ({codebaseFiles.length}):
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {codebaseFiles.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between rounded bg-gray-50 px-3 py-2"
+                    >
+                      <div className="flex items-center">
+                        <FileText className="mr-2 h-4 w-4 text-gray-500" />
+                        <span className="text-sm text-gray-700 truncate">
+                          {file.name}
+                        </span>
+                        <span className="ml-2 text-xs text-gray-400">
+                          ({(file.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(index)}
+                        className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
-          <div className={`${image ? "invisible" : ""} text-right`}>
-            <button
-              onClick={() =>
-                setImage(
-                  "https://napkinsdev.s3.us-east-1.amazonaws.com/next-s3-uploads/91061dca-cebc-4215-ab2c-8bde6cb46cac/trader-wafer.JPG",
-                )
-              }
-              className="text-xs font-semibold text-blue-400 hover:text-blue-500"
-            >
-              Use a sample image
-            </button>
-          </div>
 
-          <div className="divide-y">
-            <div className="grid grid-cols-2 py-7">
-              <div>
-                <p className="text-sm font-bold text-gray-900">Model</p>
-                <p className="mt-2 text-sm text-gray-500">
-                  Select the Llama 3.2 vision model you want to use.
-                </p>
-              </div>
-              <ToggleGroup
-                type="single"
-                className="mx-auto flex flex-wrap justify-start gap-2"
-                onValueChange={setModel}
-                value={model}
-              >
-                {models.map((model) => (
-                  <ToggleGroupItem
-                    variant="outline"
-                    key={model.value}
-                    value={model.value}
-                    className="rounded-full px-3 py-1 text-xs font-medium shadow-none data-[state=on]:bg-black data-[state=on]:text-white"
-                  >
-                    {model.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-            <div className="grid grid-cols-2 py-7">
-              <div>
-                <p className="text-sm font-bold text-gray-900">Languages</p>
-                <p className="mt-2 text-sm text-gray-500">
-                  Choose up to 3 languages for the product descriptions.
-                </p>
-              </div>
-              <ToggleGroup
-                type="multiple"
-                className="mx-auto flex flex-wrap justify-start gap-2"
-                onValueChange={setSelectedLanguages}
-              >
-                {languages.map((lang) => (
-                  <ToggleGroupItem
-                    variant="outline"
-                    key={lang.code}
-                    value={lang.code}
-                    disabled={
-                      selectedLanguages.length === 3 &&
-                      !selectedLanguages.includes(lang.code)
-                    }
-                    className="rounded-full px-3 py-1 text-xs font-medium shadow-none data-[state=on]:bg-black data-[state=on]:text-white"
-                  >
-                    {lang.name}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-            <div className="grid grid-cols-2 py-7">
-              <div>
-                <p className="text-sm font-bold text-gray-900">Length</p>
-                <p className="mt-2 text-sm text-gray-500">
-                  Select the length of the product descriptions.
-                </p>
-              </div>
-              <ToggleGroup
-                type="single"
-                className="mx-auto flex flex-wrap justify-start gap-2"
-                onValueChange={setLength}
-                value={length}
-              >
-                {lengths.map((model) => (
-                  <ToggleGroupItem
-                    variant="outline"
-                    key={model.value}
-                    value={model.value}
-                    className="rounded-full px-3 py-1 text-xs font-medium shadow-none data-[state=on]:bg-black data-[state=on]:text-white"
-                  >
-                    {model.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-          </div>
-
-          <div className="mt-10 text-right">
+          {/* Generate Button */}
+          <div className="text-right">
             <Button
               onClick={handleSubmit}
               disabled={
-                !image || selectedLanguages.length === 0 || status === "loading"
+                !projectDescription.trim() || 
+                codebaseFiles.length === 0 || 
+                status === "loading"
               }
               className="relative"
             >
               <span
                 className={`${
                   status === "loading" ? "opacity-0" : "opacity-100"
-                } whitespace-pre-wrap text-center font-semibold leading-none tracking-tight text-white dark:from-white dark:to-slate-900/10`}
+                } whitespace-pre-wrap text-center font-semibold leading-none tracking-tight text-white`}
               >
-                Generate descriptions
+                Generate Context
               </span>
 
               {status === "loading" && (
@@ -251,44 +189,59 @@ export default function Page() {
         </div>
       </Card>
 
+      {/* Results Panel */}
       {status === "idle" ? (
         <div className="flex h-64 flex-col items-center justify-center rounded-xl bg-gray-50 lg:h-auto">
+          <FileText className="mb-4 h-12 w-12 text-gray-400" />
           <p className="text-center text-xl text-gray-500">
-            See your generated descriptions here
+            Your generated context file will appear here
+          </p>
+          <p className="mt-2 text-center text-sm text-gray-400">
+            Upload your codebase and describe your project to get started
           </p>
         </div>
       ) : (
         <Card className="mx-auto w-full max-w-xl p-6">
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold">Generated Descriptions</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-semibold">Generated Context File</h3>
+              {status === "success" && contextJson && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyToClipboard}
+                  className="flex items-center gap-2"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      Copy JSON
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            
             {status === "loading" ? (
-              <div className="space-y-8">
-                {selectedLanguages.map((language) => (
-                  <div className="flex flex-col space-y-3" key={language}>
-                    <Skeleton className="h-8 w-[250px]" />
-                    <Skeleton
-                      className={`${
-                        length === "short"
-                          ? "h-12"
-                          : length === "medium"
-                            ? "h-20"
-                            : "h-32"
-                      }`}
-                    />
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-16 w-full" />
               </div>
             ) : (
-              <>
-                {descriptions.map(({ language, description }) => (
-                  <div key={language}>
-                    <h4 className="font-medium">
-                      {languages.find((l) => l.code === language)?.name}
-                    </h4>
-                    <p className="mt-1 text-sm text-gray-600">{description}</p>
-                  </div>
-                ))}
-              </>
+              contextJson && (
+                <div className="rounded-lg bg-gray-50 p-4">
+                  <pre className="whitespace-pre-wrap text-sm text-gray-800 overflow-x-auto">
+                    <code>{JSON.stringify(contextJson, null, 2)}</code>
+                  </pre>
+                </div>
+              )
             )}
           </div>
         </Card>
