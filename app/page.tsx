@@ -107,21 +107,41 @@ export default function Page() {
                 <div className="flex flex-col items-center">
                   <Upload className="mb-2 h-8 w-8 text-gray-400" />
                   <span className="text-sm text-gray-600">
-                    Upload codebase files
+                    Upload codebase files or folders
                   </span>
                   <span className="mt-1 text-xs text-gray-400">
-                    Select multiple files (JS, TS, JSON, etc.)
+                    Select files or drag & drop folders
                   </span>
                 </div>
                 <input
                   id="codebase-upload"
                   type="file"
                   multiple
+                  webkitdirectory=""
                   accept=".js,.ts,.jsx,.tsx,.json,.md,.txt,.py,.java,.cpp,.c,.html,.css,.scss,.vue,.php,.rb,.go,.rs,.swift,.kt"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
               </Label>
+            </div>
+
+            {/* Alternative: Individual Files Button */}
+            <div className="mt-2 text-center">
+              <span className="text-xs text-gray-500">or</span>
+              <Label
+                htmlFor="individual-files"
+                className="ml-2 cursor-pointer text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                select individual files
+              </Label>
+              <input
+                id="individual-files"
+                type="file"
+                multiple
+                accept=".js,.ts,.jsx,.tsx,.json,.md,.txt,.py,.java,.cpp,.c,.html,.css,.scss,.vue,.php,.rb,.go,.rs,.swift,.kt"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
             </div>
 
             {/* Display Selected Files */}
@@ -130,7 +150,7 @@ export default function Page() {
                 <p className="text-sm font-medium text-gray-700">
                   Selected Files ({codebaseFiles.length}):
                 </p>
-                <div className="max-h-32 overflow-y-auto space-y-1">
+                <div className="max-h-40 overflow-y-auto space-y-1">
                   {codebaseFiles.map((file, index) => (
                     <div
                       key={index}
@@ -138,8 +158,8 @@ export default function Page() {
                     >
                       <div className="flex items-center">
                         <FileText className="mr-2 h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-700 truncate">
-                          {file.name}
+                        <span className="text-sm text-gray-700 truncate max-w-xs">
+                          {file.webkitRelativePath || file.name}
                         </span>
                         <span className="ml-2 text-xs text-gray-400">
                           ({(file.size / 1024).toFixed(1)} KB)
